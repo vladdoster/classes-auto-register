@@ -2,8 +2,8 @@
 Author: Vlad Doster <mvdoster@gmail.com>
 Date: 2020-07-01 17:54:50
 Last Modified by: Vlad Doster <mvdoster@gmail.com>
-Last Modified time: 2020-07-01 18:19:49
-""
+Last Modified time: 2020-07-01 18:27:24
+
 ---
 
 # Automate Registration of classes
