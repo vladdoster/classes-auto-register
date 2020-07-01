@@ -6,7 +6,7 @@ click==6.7
 coverage==4.3.4
 cryptography==1.7.2
 cx-Oracle==5.2.1
-Django==1.10.5
+Django==1.11.29
 django-auth-ldap==1.2.8
 django-bootstrap3==8.1.0
 django-bower==5.2.0
