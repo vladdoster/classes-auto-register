@@ -58,7 +58,7 @@ pyOpenSSL==16.2.0
 python-dateutil==2.6.1
 pytz==2016.10
 PyVirtualDisplay==0.2.1
-requests==2.13.0
+requests==2.20.0
 salesforce-oauth2==0.1
 selenium==3.4.2
 shaper==20160616.126045
