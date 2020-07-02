@@ -6,7 +6,7 @@ Last Modified time: 2020-07-01 18:27:24
 
 ---
 
-# Automate Registration of classes
+# Automate registration of classes
 
 ## Run:
 
