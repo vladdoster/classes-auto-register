@@ -51,9 +51,12 @@ brew install chromedriver
 4. Run
 
 ```bash
-# No logfile
-python main.py > log.txt
-
-# Generate log file
-python main.py > log.txt
+./auto-register -h 
+usage: auto-register [-h] [--verbose] [-l] 
+Auto register for classes using supplied CRNs 
+optional arguments: 
+  -h, --help      show this help message and exit 
+  --verbose, -v   Allow info and debug log messages. Useful if something is broken. 
+  -l, --log-file  Log to a file in the current working directory. 
+Created and maintained by Vlad Doster <mvdoster@gmail.com>
 ```
