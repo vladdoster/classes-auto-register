@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Author: Vlad Doster <mvdoster@gmail.com>
+# Date: 2020-07-01 17:49:32
+# Last Modified by: Vlad Doster <mvdoster@gmail.com>
+# Last Modified time: 2020-07-01 22:23:11
+
+import argparse
+import collections
+import configparser
+import datetime
+import json
+import logging
+import os
+import sys
+import time
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import Select
+
+user_credentials = collections.namedtuple("Credentials", ["username", "password"])
+settings = collections.namedtuple("Settings", ["user_credentials", "crns", "subjects", "cycles", "wait_time"])
+
+
+def debug(k, v):
+    logger.debug("{0}: {1}".format(k, v))
+
+
+def info(k, v):
+    logger.info("{0}: {1}".format(str(k).capitalize(), v))
+
+
+def cli():
+    parser = argparse.ArgumentParser(
+        prog="auto-register",
+        description="Auto register for classes using supplied CRNs",
+        epilog="Created and maintained by Vlad Doster <mvdoster@gmail.com> {0}".format(datetime.datetime.now()),
+        add_help=True,
+    )
+    # Display debug + info logs
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_const",
+        dest="log_level",
+        const=logging.DEBUG,
+        default=logging.INFO,
+        help="Allow info and debug log messages. Useful if something is broken.",
+    )
+    # Generate log file in addition to stdout logging
+    parser.add_argument("-l", "--log-file", action="store_true", required=False, help="Log to a file in the current working directory.")
+    return parser
+
+
+def dict_crawler(dictionary, depth=0, parent_list=["root"], parent_values_list=[], done=False):
+    parent_values_list.append(dictionary)
+    exit_dict = False
+    if done:
+        return False
+
+    info("depth", depth)
+    info("Parent List", parent_list)
+    while not exit_dict:
+        inpt = input(prompt="Select one: ")
+        try:
+            index = int(inpt)
+            if type(dictionary) == type(dict()):
+                c = 0
+                for i in dictionary.keys():
+                    if c == index - 1:
+                        dest = i
+                    c += 1
+            else:
+                dest = index - 1
+            info("Destination", dest)
+            try:
+                parent_list.append(dest)
+                depth += 1
+                exit_dict = dict_crawler(dictionary[dest], depth, parent_list, parent_values_list, done)
+            except:
+                pass
+        except Exception as e:
+            logger.error(e)
+        if inpt == "e" or inpt == "q":
+            exit_dict = True
+        elif inpt == "t":
+            info("Type", type(dictionary))
+        elif inpt == "k":
+            info("Keys", dictionary.keys())
+            counter = 1
+            for key in dictionary.keys():
+                info(counter, key)
+                counter += 1
+        elif inpt == "l":
+            counter = 1
+            for item in dictionary:
+                info(counter, item)
+                counter += 1
+        elif inpt == "n":
+            try:
+                info("Number of keys", len(dictionary.keys()))
+            except:
+                try:
+                    logger.info("Num of items: {}".format(len(dictionary)))
+                except:
+                    pass
+        elif inpt == "p":
+            try:
+                info("Parent of {0}".format(parent_list[depth]), parent_list[depth - 1])
+                if parent_list[depth - 1] == "root":
+                    dest = parent_values_list[0]
+                    info("Destination", dest)
+                    depth = 0
+                    parent_list.pop(len(parent_list) - 1)
+                    parent_values_list.pop(len(parent_values_list) - 1)
+                    exit_dict = dict_crawler(dest, depth, parent_list, parent_values_list, done)
+                else:
+                    dest = parent_values_list[depth - 2][parent_list[depth - 1]]
+                    info("Destination", dest)
+                    depth -= 1
+                    parent_list.pop(len(parent_list) - 1)
+                    parent_values_list.pop(len(parent_values_list) - 1)
+                    exit_dict = dict_crawler(dest, depth, parent_list, parent_values_list, done)
+            except:
+                info("Location", "root")
+
+        elif inpt == "v":
+            value_target = input("Enter index of value wanted")
+            if value_target == "*":
+                info("value selected", value_target)
+                try:
+                    for i in dictionary.keys():
+                        info(i, str(dictionary[i]))
+                except:
+                    for i in dictionary:
+                        info(dictionary.index(i), i)
+            else:
+                index = int(value_target)
+                if type(dictionary) == type(dict()):
+                    c = 0
+                    for i in dictionary.keys():
+                        if c == index - 1:
+                            dest = i
+                        c += 1
+                else:
+                    dest = index - 1
+                logger.info(
+                    """Destination: {0}
+                              Type: {1}
+                             Value: {2}""".format(
+                        dest, type(dictionary[dest]), dictionary[dest]
+                    )
+                )
+        elif inpt == "h":
+            logger.info(
+                """
+                OPTIONS:
+                e/q: exit
+                t: type
+                k: keys
+                l: list items
+                n: len of keys
+                p: go to parent
+                1-9: go to index/key at that num
+                v: enter get value at index
+                h: log message
+                """
+            )
+            info("parent list / path", parent_list)
+    return True
+
+
+def run_main():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    driver = webdriver.Chrome(chrome_options=chrome_options)
+    logger.info("Getting list of classes")
+    # Sign in
+    driver.get("http://lconnect.wit.edu")
+    # Might be needed if site is dependent on cookies
+    # driver.delete_all_cookies()
+    logger.debug(driver.title)
+    user_name_field = driver.find_element_by_id("username")
+    password_field = driver.find_element_by_id("password")
+    sign_in_button = driver.find_elements_by_xpath("/html/body/div/div[3]/form/table/tbody/tr[4]/td[1]/div/input")[0]
+
+    user_name_field.send_keys(settings.user_credentials.username)
+    password_field.send_keys(settings.user_credentials.password)
+    sign_in_button.send_keys(Keys.RETURN)
+    debug("browser title", driver.title)
+    leopardweb_button = driver.find_elements_by_xpath(
+        "/html/body/div[8]/div/div[2]/div[2]/div[1]/div/div[1]/section/div/div/div/div[1]/p[1]/a/img"
+    )[0]
+
+    leopardweb_button.click()
+    handles = list(driver.window_handles)
+    old_window = driver.current_window_handle
+    # remove old window
+    handles.remove(driver.current_window_handle)
+    driver.switch_to_window(handles[0])
+    # open leopard-web with permanent instance
+    driver.get("https://prodweb2.wit.edu/SSBPROD/twbkwbis.P_GenMenu?name=bmenu.P_StuMainMnu")
+    debug("browser title", driver.title)
+    student_tab = driver.find_elements_by_xpath("/html/body/div[1]/div[2]/span/map/table/tbody/tr[1]/td/table/tbody/tr/td[3]/a")[0]
+    # student tab
+    debug("browser title", driver.title)
+    registration_button = driver.find_elements_by_xpath("/html/body/div[3]/table[1]/tbody/tr[1]/td[2]/a")[0]
+    registration_button.click()
+    debug("browser title", driver.title)
+    # registration button page
+    search_button = driver.find_elements_by_xpath("/html/body/div[3]/table[1]/tbody/tr[3]/td[2]/a")[0]
+    search_button.click()
+    debug("browser title", driver.title)
+    # select a search term for classes
+    dropdown = driver.find_element_by_id("term_input_id")
+    selecting = Select(dropdown)
+    selecting.select_by_visible_text("Summer 2018")
+    submit = driver.find_elements_by_xpath("/html/body/div[3]/form/input[2]")[0]
+    submit.click()
+    debug("browser title", driver.title)
+    # advanced search to get all
+    advanced_search_button = driver.find_elements_by_xpath("/html/body/div[3]/form/input[18]")[0]
+    advanced_search_button.click()
+    debug("browser title", driver.title)
+    subject_select = driver.find_element_by_id("subj_id")
+    subject_selecting = Select(subject_select)
+    for sub in settings.subjects:
+        subject_selecting.select_by_value(sub)
+    # go to big list
+    section_search_button = driver.find_elements_by_xpath("/html/body/div[3]/form/span/input[1]")[0]
+    section_search_button.click()
+    debug("browser title", driver.title)
+    subject_select = driver.find_element_by_id("subj_id")
+    source = str(driver.page_source)
+    source = source[source.find("Sections Found") : source.find("Skip to top")]
+    source_lines = source.split("\n")
+    debug("browser title", driver.title)
+    data_lines = []
+    adding = False
+    for line in source_lines:
+        should_add = line.find("<td class=") > -1
+        debug("line", line)
+        debug("adding enabled", adding)
+        debug("should add", should_add)
+        if should_add:
+            data_lines.append(line)
+    debug("total classes", len(data_lines))
+    table_stuff_string = "\n".join(data_lines)
+    split_on_classes = table_stuff_string.split('<td class="dddefault"><a href="')
+    debug("total sections", len(split_on_classes))
+    # make dict with crn being key and other values as values per class
+    classes_dict = dict()
+    for course in split_on_classes:
+        crn = course[course.find('return true">') + 13 : course.find('return true">') + 18]
+        is_valid_crn = False
+        try:
+            int(crn)
+            is_valid_crn = True
+        except:
+            debug("Invalid pair", "{0} <-> {1}".format(crn, course))
+        if is_valid_crn:
+            temp_course = (
+                course.replace('<td class="dddefault">', "")
+                .replace("</td>", "")
+                .replace('(<abbr title="Primary">P</abbr>)', "")
+                .replace('<abbr title="To Be Announced">TBA</abbr>', "TBA")
+            )
+            debug("temporary course", temp_course)
+            course_list = temp_course.split("\n")
+            course_list = course_list[1:]
+            debug("Course list", course_list)
+            classes_dict[crn] = dict()
+            classes_dict[crn]["Subject"] = course_list[0]
+            classes_dict[crn]["Course"] = course_list[1]
+            classes_dict[crn]["Section"] = course_list[2]
+            classes_dict[crn]["Campus"] = course_list[3]
+            classes_dict[crn]["Credit hrs"] = course_list[4]
+            classes_dict[crn]["Name"] = course_list[5]
+            classes_dict[crn]["Days"] = course_list[6]
+            classes_dict[crn]["Time"] = course_list[7]
+            classes_dict[crn]["Capacity"] = course_list[8]
+            classes_dict[crn]["Filled"] = course_list[9]
+            classes_dict[crn]["Remaining"] = course_list[10]
+            classes_dict[crn]["Instructor"] = course_list[11]
+            classes_dict[crn]["Location"] = course_list[13]
+            classes_dict[crn]["Full"] = bool(int(course_list[10]) <= 1)
+    debug("Class status", classes_dict.keys())
+    logger.info("Checking for open slots")
+    for crn in settings.crns_to_watch:
+        if not classes_dict[crn]["Full"]:
+            info("Attempting to register for", classes_dict[crn])
+            # now check if in classes are full
+            student_tab = driver.find_elements_by_xpath("/html/body/div[1]/div[2]/span/map/table/tbody/tr[1]/td/table/tbody/tr/td[3]/a")[0]
+            student_tab.click()
+            debug("browser title", driver.title)
+            registration_button = driver.find_elements_by_xpath("/html/body/div[3]/table[1]/tbody/tr[1]/td[2]/a")[0]
+            registration_button.click()
+            debug("browser title", driver.title)
+            add_or_drop_button = driver.find_elements_by_xpath("/html/body/div[3]/table[1]/tbody/tr[2]/td[2]/a")[0]
+            add_or_drop_button.click()
+            debug("browser title", driver.title)
+            crn_input = driver.find_element_by_id("crn_id1")
+            crn_input.send_keys(crn)
+            submit_button = driver.find_elements_by_xpath("/html/body/div[3]/form/input[19]")[0]
+            submit_button.click()
+            # successful registration?
+            status = driver.find_elements_by_xpath("/html/body/div[3]/form/table[4]/tbody/tr[2]/td[1]")[0]
+            info("Registration result for CRN", "{0} is {1}".format(crn, status.text))
+    # close browser handle
+    driver.close()
+    driver.switch_to_window(old_window)
+    driver.close()
+
+
+def get_config():
+    logger.info("Starting process...")
+    try:
+        filename = "config.ini"
+        config = configparser.ConfigParser(allow_no_value=True)
+        config.read(filename)
+    except OSError:
+        sys.exit(logger.error("Could not read {0!r} file. Exiting...".format(filename)))
+    supplied_credentials, crns_to_watch, subjects, prog_settings = (
+        dict(config.items("credentials")),
+        list(config._sections.get("crns").keys()),
+        list(config._sections.get("subjects").keys()),
+        dict(config.items("program settings")),
+    )
+    logger.debug(
+        """
+        User Credentials: {0}
+        CRNs to register for: {1}
+        Subjects possible: {2}
+        Program settings: {3}
+        """.format(
+            supplied_credentials, crns_to_watch, subjects, prog_settings
+        )
+    )
+    global settings, user_credentials
+    debug("credentials", supplied_credentials)
+    settings.crns = crns_to_watch
+    settings.subjects = subjects
+    for val in ["cycles", "wait_time"]:
+        try:
+            setattr(settings, val, int(prog_settings.get(val)))
+        except KeyError:
+            logger.error("Must specify a number for {0} in config.ini".format(val))
+        except ValueError:
+            logger.error("{0!r} setting in config.ini  must be integer but is currently {1}".format(val, type(prog_settings.get(val))))
+    if any(val == "" for val in supplied_credentials.values()):
+        sys.exit(logger.error("Please supply a username and password in config.ini. Exiting..."))
+    settings.user_credentials = user_credentials(**supplied_credentials)
+
+
+def main():
+    get_config()
+    global settings
+    if settings.cycles == -1:
+        while True:
+            run_main()
+            time.sleep(settings.wait_time)
+    else:
+        for _ in range(1, settings.cycles):
+            run_main()
+            time.sleep(settings.wait_time)
+
+
+if __name__ == "__main__":
+    args = cli().parse_args()
+    logger = logging.getLogger()
+    logging.basicConfig(level=args.log_level, format="[{levelname}] {message}", style="{")
+    if args.log_file:
+        handler = logging.FileHandler("{}-{}.log".format(sys.argv[0], datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")))
+        formatter = logging.Formatter("[{levelname}] {message}", style="{")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    main()
