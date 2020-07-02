@@ -39,7 +39,7 @@ sudo yum install chromedriver
 brew install chromedriver
 ```
 
-3. Fill out `config.ini`
+3. Fill out [config.ini](config.ini)
 
    Username and Password should be ones that you use to login to classes registration portal.
    **Tweakable settings**
